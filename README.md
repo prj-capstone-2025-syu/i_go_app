@@ -75,9 +75,9 @@ IGO는 AI를 활용한 지각 방지 솔루션으로, 기존 웹 서비스를 An
 ```
 app/build/outputs/apk/
 ├── debug/
-│   └── IGO_AI_v1.1-debug_debug_vc2.apk
+│   └── IGO_AI_v1.1-debug_debug.apk
 └── release/
-    └── IGO_AI_v1.1_release_vc2.apk
+    └── IGO_AI_v1.1_release.apk
 ```
 
 
