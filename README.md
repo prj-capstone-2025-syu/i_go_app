@@ -52,14 +52,14 @@ IGO는 AI를 활용한 지각 방지 솔루션으로, 기존 웹 서비스를 An
 #### Debug APK 빌드 (개발/테스트용)
 1. `Build` → `Build Bundle(s) / APK(s)` → `Build APK(s)` 클릭
 2. 빌드 완료 후 `locate` 링크 클릭하여 APK 위치 확인
-3. 생성된 파일: `IGO_AI_v1.1-debug_debug_vc2.apk`
+3. 생성된 파일: `IGO_AI_v1.1-debug_debug.apk`
 
 #### Release APK 빌드 (배포용)
 1. `Build` → `Generate Signed Bundle / APK` 선택
 2. `APK` 선택 후 `Next`
 3. 키스토어 생성 또는 기존 키스토어 선택
 4. 빌드 타입을 `release` 선택
-5. 생성된 파일: `IGO_AI_v1.1_release_vc2.apk`
+5. 생성된 파일: `IGO_AI_v1.1_release.apk`
 
 ### 방법 2: Gradle 명령어 사용
 
