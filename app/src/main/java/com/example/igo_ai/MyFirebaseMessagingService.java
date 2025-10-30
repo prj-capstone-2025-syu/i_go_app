@@ -47,7 +47,6 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
         Intent intent = new Intent(this, MainActivity.class);
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
 
-        // 데이터가 있다면 Intent에 추가
         if (data != null) {
             for (java.util.Map.Entry<String, String> entry : data.entrySet()) {
                 intent.putExtra(entry.getKey(), entry.getValue());
@@ -59,13 +58,14 @@ public class MyFirebaseMessagingService extends FirebaseMessagingService {
 
         NotificationCompat.Builder notificationBuilder =
                 new NotificationCompat.Builder(this, CHANNEL_ID)
-                        .setSmallIcon(android.R.drawable.ic_dialog_info) // 기본 안드로이드 아이콘 사용
+                        .setSmallIcon(R.drawable.ic_stat_name)
+                        .setColor(0xFF0078D4)
                         .setContentTitle(title != null ? title : "IGO 알림")
                         .setContentText(body != null ? body : "새로운 알림이 있습니다")
                         .setAutoCancel(true)
                         .setContentIntent(pendingIntent)
-                        .setPriority(NotificationCompat.PRIORITY_DEFAULT)
-                        .setStyle(new NotificationCompat.BigTextStyle().bigText(body)); // 긴 텍스트 지원
+                        .setPriority(NotificationCompat.PRIORITY_HIGH)  // HIGH로 변경
+                        .setStyle(new NotificationCompat.BigTextStyle().bigText(body));
 
         NotificationManager notificationManager =
                 (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);

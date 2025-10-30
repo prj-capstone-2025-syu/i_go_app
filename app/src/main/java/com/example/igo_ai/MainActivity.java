@@ -14,6 +14,7 @@ import android.util.Log;
 import android.view.View;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
+import android.webkit.CookieManager;
 import android.webkit.GeolocationPermissions;
 import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
@@ -38,17 +39,20 @@ public class MainActivity extends AppCompatActivity {
 
     // 뒤로가기 콜백
     private OnBackPressedCallback onBackPressedCallback;
+    private boolean isPageLoaded = false;
 
     // FCM 토큰 업데이트를 받기 위한 BroadcastReceiver
     private BroadcastReceiver fcmTokenReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
-            if ("com.example.igo_ai.FCM_TOKEN_UPDATED".equals(intent.getAction())) {
+            if ("com.igo.app.FCM_TOKEN_UPDATED".equals(intent.getAction()) && isPageLoaded) {
                 String token = intent.getStringExtra("fcm_token");
                 if (token != null && webView != null) {
-                    Log.d(TAG, "브로드캐스트로 FCM 토큰 수신: " + token);
+                    Log.d(TAG, "브로드캐스트로 FCM 토큰 수신 (페이지 로드됨): " + token);
                     sendTokenToWebView(token);
                 }
+            } else if (!isPageLoaded) {
+                Log.d(TAG, "브로드캐스트 수신했으나 페이지 로드 전이라 무시함");
             }
         }
     };
@@ -57,12 +61,12 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        setupImmersiveMode();
+        setTheme(R.style.AppTheme_FullScreen);
 
         setContentView(R.layout.activity_main);
 
         // BroadcastReceiver 등록 (Android 13+ 호환)
-        IntentFilter filter = new IntentFilter("com.example.igo_ai.FCM_TOKEN_UPDATED");
+        IntentFilter filter = new IntentFilter("com.igo.app.FCM_TOKEN_UPDATED");
 
         // Android 13 (API 33) 이상에서는 플래그 명시 필요
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
@@ -73,62 +77,19 @@ public class MainActivity extends AppCompatActivity {
             registerReceiver(fcmTokenReceiver, filter);
         }
 
+        webView = findViewById(R.id.webview);
+        setupWebView();
+
         // 뒤로가기 콜백 설정
         setupOnBackPressedCallback();
 
         // 권한 확인
         checkPermissions();
 
-        webView = findViewById(R.id.webview);
-
-        setupWebView();
-
-        // Firebase 토큰 가져오기 (WebView 설정 후)
-        getFirebaseToken();
-
         // 실제 EC2 도메인
         webView.loadUrl("https://igo.ai.kr");
     }
 
-    private void setupImmersiveMode() {
-        // 테마에서 기본 설정을 했으므로 추가적인 Immersive Sticky 모드만 적용
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                // Android 11 이상
-                WindowInsetsController controller = getWindow().getInsetsController();
-                if (controller != null) {
-                    // 상태바와 네비게이션 바 숨기기
-                    controller.hide(WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars());
-
-                    // Immersive Sticky 모드 - 스와이프하면 일시적으로 나타남
-                    controller.setSystemBarsBehavior(WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
-                }
-            } else {
-                // Android 10 이하 - SystemUiVisibility 사용
-                int uiOptions = View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
-                        View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY |
-                        View.SYSTEM_UI_FLAG_LAYOUT_STABLE |
-                        View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION |
-                        View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN;
-
-                getWindow().getDecorView().setSystemUiVisibility(uiOptions);
-            }
-
-            Log.d(TAG, "Immersive Mode 설정 완료 (테마 기반)");
-        } catch (Exception e) {
-            Log.w(TAG, "Immersive Mode 설정 중 오류 발생: " + e.getMessage());
-        }
-    }
-
-    // 시스템 UI 가시성 변경 감지 (Android 10 이하용)
-    @Override
-    public void onWindowFocusChanged(boolean hasFocus) {
-        super.onWindowFocusChanged(hasFocus);
-        if (hasFocus) {
-            // 포커스를 다시 얻었을 때 Immersive Mode 재적용
-            setupImmersiveMode();
-        }
-    }
 
     private void setupOnBackPressedCallback() {
         onBackPressedCallback = new OnBackPressedCallback(true) {
@@ -164,36 +125,38 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void sendTokenToWebView(String token) {
-        if (webView != null) {
-            webView.post(() -> {
-                // 여러 방법으로 토큰 전달 시도
-                String script = String.format(
-                        // 방법 1: setFCMToken 함수 호출
-                        "if(typeof window.setFCMToken === 'function') { " +
-                                "  window.setFCMToken('%s'); " +
-                                "  console.log('토큰이 setFCMToken으로 전달됨'); " +
-                                "} else if(typeof window.updateFCMToken === 'function') { " +
-                                "  window.updateFCMToken('%s'); " +
-                                "  console.log('토큰이 updateFCMToken으로 전달됨'); " +
-                                "} else { " +
-                                // 방법 2: localStorage에 토큰 저장
-                                "  localStorage.setItem('fcm_token', '%s'); " +
-                                "  console.log('토큰이 localStorage에 저장됨: %s'); " +
-                                // 방법 3: Custom Event 발생
-                                "  var event = new CustomEvent('fcmTokenReceived', { detail: '%s' }); " +
-                                "  window.dispatchEvent(event); " +
-                                "  console.log('fcmTokenReceived 이벤트 발생'); " +
-                                // 방법 4: 전역 변수로 설정
-                                "  window.ANDROID_FCM_TOKEN = '%s'; " +
-                                "  console.log('전역 변수 ANDROID_FCM_TOKEN 설정 완료'); " +
-                                "}",
-                        token, token, token, token, token, token);
-
-                webView.evaluateJavascript(script, result -> {
-                    Log.d(TAG, "FCM 토큰 전달 스크립트 실행 결과: " + result);
-                });
-            });
+        if (webView == null || !isPageLoaded) {
+            Log.d(TAG, "웹뷰가 준비되지 않음. 토큰 전송 보류");
+            return;
         }
+
+        webView.post(() -> {
+            // 1) localStorage에 직접 저장
+            String saveToStorage = String.format(
+                    "localStorage.setItem('fcmToken', '%s'); console.log('✅ 앱 FCM 토큰 저장:', '%s');",
+                    token, token
+            );
+
+            // 2) window 객체에 설정 (Next.js에서 접근 가능)
+            String setWindow = String.format(
+                    "window.ANDROID_FCM_TOKEN = '%s'; console.log('✅ window.ANDROID_FCM_TOKEN 설정');",
+                    token
+            );
+
+            // 3) 이벤트 발생시켜 Next.js에 알림
+            String dispatchEvent = String.format(
+                    "window.dispatchEvent(new CustomEvent('androidFcmToken', { detail: '%s' })); " +
+                            "console.log('✅ androidFcmToken 이벤트 발생');",
+                    token
+            );
+
+            String fullScript = saveToStorage + setWindow + dispatchEvent;
+
+            webView.evaluateJavascript(fullScript, result -> {
+                Log.d(TAG, "✅ FCM 토큰 전달 완료: " + token);
+                Log.d(TAG, "스크립트 실행 결과: " + result);
+            });
+        });
     }
 
     private void getFirebaseToken() {
@@ -222,7 +185,11 @@ public class MainActivity extends AppCompatActivity {
         webSettings.setSupportZoom(true);
         webSettings.setBuiltInZoomControls(true);
         webSettings.setDisplayZoomControls(false);
-        webSettings.setCacheMode(WebSettings.LOAD_DEFAULT);
+        webSettings.setCacheMode(WebSettings.LOAD_NO_CACHE);
+
+        CookieManager cookieManager = CookieManager.getInstance();
+        cookieManager.setAcceptCookie(true);
+        cookieManager.setAcceptThirdPartyCookies(webView, true);
 
         // 구글 소셜 로그인을 위한 User-Agent 설정 (403 disallowed_useragent 해결)
         String userAgent = webSettings.getUserAgentString();
@@ -244,6 +211,10 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
+
+                isPageLoaded = true;
+                Log.d(TAG, "✅ 페이지 로드 완료. isPageLoaded = true");
+
                 // 페이지 로드 완료 후 토큰 전달 재시도
                 getFirebaseToken();
             }

@@ -1,2 +1,6 @@
 /build
 app/google-services.json
+
+# Firebase 설정 파일 (보안)
+google-services.json
+*/google-services.json
