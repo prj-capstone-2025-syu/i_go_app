@@ -8,12 +8,9 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.net.Uri;
-import android.os.Build;
+import android.content.ActivityNotFoundException;
 import android.os.Bundle;
 import android.util.Log;
-import android.view.View;
-import android.view.WindowInsets;
-import android.view.WindowInsetsController;
 import android.webkit.CookieManager;
 import android.webkit.GeolocationPermissions;
 import android.webkit.JavascriptInterface;
@@ -22,6 +19,8 @@ import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.Toast;
+
 import androidx.activity.OnBackPressedCallback;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
@@ -199,7 +198,7 @@ public class MainActivity extends AppCompatActivity {
 
         // 구글 OAuth를 위한 추가 설정
         webSettings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
-        webSettings.setSupportMultipleWindows(true);
+        webSettings.setSupportMultipleWindows(false);
         webSettings.setJavaScriptCanOpenWindowsAutomatically(true);
         webSettings.setLoadWithOverviewMode(true);
         webSettings.setUseWideViewPort(true);
@@ -221,12 +220,59 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, String url) {
-                // OAuth 리다이렉트 URL 처리
+                // 1. OAuth 리다이렉트 URL 처리
                 if (url.contains("oauth") || url.contains("accounts.google.com")) {
                     Log.d(TAG, "OAuth URL 감지: " + url);
                     view.loadUrl(url);
-                    return false;
+                    return false; // 웹뷰가 직접 처리
                 }
+
+                // 2. 기상청 분기
+                // 클릭한 URL이 "https://www.kma.go.kr/w/iframe/dfs.do" 이거면
+                // "https://www.weather.go.kr/w/index.do" 이 주소를 외부 브라우저로 열기
+                if ("https://www.kma.go.kr/w/iframe/dfs.do".equals(url)) {
+                    Log.d(TAG, "기상청 iframe URL 감지. 외부 브라우저로 메인 페이지 실행.");
+                    try {
+                        Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse("https://www.weather.go.kr/w/index.do"));
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        startActivity(intent);
+                        return true; // 웹뷰는 로드 안 함
+                    } catch (Exception e) {
+                        Log.e(TAG, "외부 브라우저(기상청) 실행 실패", e);
+                        return true; // 웹뷰는 로드 안 함
+                    }
+                }
+
+                // 3. 티맵 분기
+                if (url.startsWith("tmap://")) {
+                    Log.d(TAG, "Tmap 스킴 감지: " + url);
+                    try {
+                        // 티맵 앱 실행 시도
+                        Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        startActivity(intent);
+                        return true; // 웹뷰는 로드 안 함
+
+                    } catch (ActivityNotFoundException e) {
+                        // 4. 티맵 설치 폴백 로직
+                        Log.w(TAG, "오류: 해당 URL을 처리할 앱을 찾을 수 없습니다. " + url, e);
+                        Toast.makeText(MainActivity.this, "티맵 앱이 설치되어 있지 않습니다.", Toast.LENGTH_SHORT).show();
+                        String packageName = "com.skt.tmap.ku"; // 티맵 패키지명
+                        if (url.startsWith("tmap://")) {
+                            try {
+                                Intent marketIntent = new Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=" + packageName));
+                                marketIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                                startActivity(marketIntent);
+                                return true;
+                            } catch (Exception marketErr) {
+                                Log.e(TAG, "플레이스토어 실행 실패", marketErr);
+                            }
+                        }
+                        return true; // 웹뷰는 로드하지 않음
+                    }
+                }
+
+                // 5. 위에서 안 걸린 나머지는 그냥 웹뷰의 기본 동작에 맡김
                 return super.shouldOverrideUrlLoading(view, url);
             }
         });
